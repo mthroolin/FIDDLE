@@ -281,6 +281,53 @@ def impute_ffill(df, columns, T, dt, mask=None):
     df_ff.sort_index(inplace=True)
     return df_ff
 
+def impute_values(df, columns, T, dt, mask=None, impute_method='ffill'):
+    if len(df) == 0:
+        return pd.DataFrame().reindex(columns=columns, fill_value=np.nan)
+    
+    if mask is None:
+        mask = presence_mask(df, columns, T, dt)
+
+    # Calculate time bins
+    df_bin = df.copy()
+    df_bin.index = pd.cut(df_bin.index, _get_time_bins(T, dt), right=False)
+
+    # Forward fill for imputation
+    if impute_method == 'ffill':
+        df_imp = df_bin.ffill()
+    elif impute_method == 'mean':
+        df_imp = df_bin.fillna(df_bin.mean())
+    elif impute_method == 'median':
+        df_imp = df_bin.fillna(df_bin.median())
+    elif impute_method == 'linear':
+        df_imp = df_bin.interpolate(method='linear', axis=0, limit_direction='forward')
+    elif impute_method == 'mode':
+        for col in df_bin.columns:
+            mode_value = df_bin[col].mode().iloc[0] if not df_bin[col].mode().empty else np.nan
+            df_bin[col] = df_bin[col].fillna(mode_value)
+        df_imp = df_bin
+    elif impute_method == 'none':
+        df_imp = df_bin  # No imputation
+    else:
+        raise ValueError(f"Unknown imputation method: {impute_method}")
+    
+    # Reindex to ensure all bins exist
+    df_imp = df_imp[~df_imp.index.duplicated(keep='last')]
+    df_imp = df_imp.reindex(_get_time_bins_index(T, dt))
+    
+    # Fill missing bins
+    if impute_method == 'ffill':
+        df_imp = df_imp.ffill()
+    
+    # Handle the mask
+    df_ff = df_imp.copy()
+    df_ff[mask.to_numpy()] = np.nan
+    df_ff.index = df_ff.index.mid
+    df_ff = pd.concat([df, df_ff]).dropna(how='all').sort_index()
+
+    return df_ff
+
+
 def most_recent_values(df_i, columns, T, dt):
     df_bin = df_i.copy()
     df_bin.index = pd.cut(df_bin.index, _get_time_bins(T, dt), right=False)

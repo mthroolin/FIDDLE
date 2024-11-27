@@ -16,6 +16,7 @@ def main():
     ######
     parser = argparse.ArgumentParser(description='')
 
+    
     # Files
     parser.add_argument('--data_fname',      type=str,     required=True)
     parser.add_argument('--population_fname',type=str,     required=True)
@@ -29,6 +30,11 @@ def main():
     parser.add_argument('--theta_2',         type=float,   default=0.001)
     parser.add_argument('--theta_freq',      type=float,   default=1.0)
     parser.add_argument('--stats_functions', nargs='+',    default=['min', 'max', 'mean'])
+    # Add impute_method argument
+    parser.add_argument('--impute_method', type=str, default='ffill',
+                    choices=['none', 'ffill', 'mean', 'linear', 'median', 'mode'],
+                    help="Method to use for imputing missing values. Choices: 'none', 'ffill', 'mean', 'linear', 'median', 'mode'. Default: 'ffill'.")
+
 
     # Debug
     parser.add_argument('--N',               type=int,     required=False)
@@ -67,6 +73,7 @@ def main():
     theta_2 = args.theta_2
     theta_freq = args.theta_freq
     stats_functions = args.stats_functions
+    impute_method = args.impute_method
 
     args.hierarchical_sep = config.get('hierarchical_sep', ':')
     args.hierarchical_levels = config.get('hierarchical_levels', [])
@@ -106,6 +113,7 @@ def main():
     print('    {:<6} = {}'.format('\u03B8\u2082', theta_2))
     print('    {:<6} = {}'.format('\u03B8_freq', theta_freq))
     print('    {:<6} = {} {}'.format('k', len(stats_functions), stats_functions))
+    print('    {:<6} = {}'.format('impute_method', args.impute_method))
     print()
     print('{} = {}'.format('discretize', {False: 'no', True: 'yes'}[args.discretize]))
     if args.discretize:

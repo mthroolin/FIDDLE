@@ -224,6 +224,7 @@ def process_time_dependent(df_data_time_series, args):
     if len(df_data_time_series) == 0:
         return None, None, None
     
+    impute_method = args.impute_method
     output_dir = args.output_dir
     theta_2 = args.theta_2
 
@@ -360,36 +361,93 @@ def post_filter_time_invariant(S_, S_feature_names_all, threshold):
 ######
 # Time-series routines
 ######
-def func_encode_single_time_series(i, g, variables, variables_num_freq, T, dt, stats_functions, impute=True):
+# def func_encode_single_time_series(i, g, variables, variables_num_freq, T, dt, stats_functions, impute=True):
+#     try:
+#         assert g.index.nunique() == 1
+#         assert g.index.unique()[0] == i
+#         # non-frequent
+#         variables_non = sorted(set(variables) - set(variables_num_freq))
+#         if len(variables_non) > 0:
+#             variables_non = sorted(set(variables) - set(variables_num_freq))
+#             df_j = pivot_event_table(g).reindex(columns=variables_non).sort_index()
+#             df_values_j = most_recent_values(df_j, variables, T, dt)
+#             df_out = df_values_j
+
+#         if len(variables_num_freq) > 0:
+#             # frequent
+#             # we're only producing mask, ffill, and statistics if the data is measured frequently enough
+#             df_i = pivot_event_table(g).reindex(columns=variables_num_freq).sort_index()
+#             mask_i = presence_mask(df_i, variables_num_freq, T, dt)
+#             delta_t_i = get_delta_time(mask_i)
+#             df_i = impute_ffill(df_i, variables_num_freq, T, dt, mask_i)
+#             df_stats_i = summary_statistics(df_i, variables_num_freq, stats_functions, T, dt)
+#             df_values_i = most_recent_values(df_i, variables, T, dt)
+#             if impute:
+#                 check_imputed_output(df_values_i)
+#                 check_imputed_output(df_stats_i)
+
+#             df_out = df_out.join([mask_i, delta_t_i, df_values_i, df_stats_i])
+#     except:
+#         print(i)
+#         raise Exception(i)
+#     return i, df_out
+
+def func_encode_single_time_series(i, g, variables, variables_num_freq, T, dt, stats_functions, impute_method='ffill'):
+    """
+    Encodes a single time series with multiple imputation options.
+
+    Parameters:
+        i: Identifier for the group (e.g., patient ID).
+        g: Grouped data for the specific identifier.
+        variables: List of all variables.
+        variables_num_freq: List of frequent variables.
+        T: Maximum time range.
+        dt: Time step size.
+        stats_functions: Statistical functions to compute for the time series.
+        impute_method: Imputation method ('ffill', 'mean', 'linear', 'median', 'mode', 'none').
+
+    Returns:
+        Tuple of identifier and the encoded DataFrame for the time series.
+    """
     try:
         assert g.index.nunique() == 1
         assert g.index.unique()[0] == i
-        # non-frequent
+        df_out = None
+
+        # Non-frequent variables
         variables_non = sorted(set(variables) - set(variables_num_freq))
         if len(variables_non) > 0:
-            variables_non = sorted(set(variables) - set(variables_num_freq))
             df_j = pivot_event_table(g).reindex(columns=variables_non).sort_index()
             df_values_j = most_recent_values(df_j, variables, T, dt)
             df_out = df_values_j
 
+        # Frequent variables
         if len(variables_num_freq) > 0:
-            # frequent
-            # we're only producing mask, ffill, and statistics if the data is measured frequently enough
             df_i = pivot_event_table(g).reindex(columns=variables_num_freq).sort_index()
             mask_i = presence_mask(df_i, variables_num_freq, T, dt)
             delta_t_i = get_delta_time(mask_i)
-            df_i = impute_ffill(df_i, variables_num_freq, T, dt, mask_i)
+
+            # Use the generalized impute_values function
+            df_i = impute_values(df_i, variables_num_freq, T, dt, mask_i, impute_method=impute_method)
+
             df_stats_i = summary_statistics(df_i, variables_num_freq, stats_functions, T, dt)
             df_values_i = most_recent_values(df_i, variables, T, dt)
-            if impute:
+
+            if impute_method != 'none':
                 check_imputed_output(df_values_i)
                 check_imputed_output(df_stats_i)
 
-            df_out = df_out.join([mask_i, delta_t_i, df_values_i, df_stats_i])
-    except:
-        print(i)
-        raise Exception(i)
+            if df_out is not None:
+                df_out = pd.concat([df_out, mask_i, delta_t_i, df_values_i, df_stats_i], axis=1)
+            else:
+                df_out = pd.concat([mask_i, delta_t_i, df_values_i, df_stats_i], axis=1)
+    except Exception as e:
+        print(f"Error processing ID {i}: {e}")
+        raise e
+
     return i, df_out
+
+
 
 def divide_chunks(l, n):
     # looping till length l
